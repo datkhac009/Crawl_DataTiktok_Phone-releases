@@ -1185,20 +1185,10 @@ def _ve_ngoai(d):
             return
         time.sleep(1.2)
 
-
 def xem_mot_link(d, goi, link, con_han, dung, xem_giay, so_vuot, dung_giay, log=lambda s: None):
-    """Xem MỘT link của pha Xem. Trả:
-        'ok'       — đã xem xong
-        'het_gio'  — hết hạn pha GIỮA CHỪNG (lần sau xem lại CHÍNH link này)
-        'dung'     — app đã đóng
-        chuỗi khác — lý do không xem được (bỏ link này, sang link kế)
-
-    `xem_giay` = (min, max) giây cho video đầu; `so_vuot` = (min, max) số video vuốt thêm;
-    `dung_giay` = (min, max) giây trên mỗi video vuốt thêm — đúng ô "Delay" bản PC dùng ở đây.
-    """
+    """Xem MỘT link của pha Xem. Tương tác xong lập tức chuyển link tiếp theo không nghỉ."""
     loai = _mo_link(d, goi, link)
     if not loai:
-        # Lỗi thoáng qua của TikTok: đo được "Something went wrong" rồi lần sau mở bình thường.
         loai = _mo_link(d, goi, link)
     if not loai:
         _ve_ngoai(d)
@@ -1207,13 +1197,11 @@ def xem_mot_link(d, goi, link, con_han, dung, xem_giay, so_vuot, dung_giay, log=
     if loai == "nhac":
         o = _cho_luoi(d)
         if not o:
-            # Trang nhạc mở nhưng lưới trống — thường là màn "Something went wrong". Mở lại một lần.
             if _mo_link(d, goi, link) == "nhac":
                 o = _cho_luoi(d)
         if not o:
             _ve_ngoai(d)
             return "trang nhạc không có video nào (sound có thể đã bị gỡ)"
-        # Chỉ bốc trong 6 ô đầu: ô xa hơn nằm dưới mép màn hình, bấm vào là cuộn chứ không mở.
         x, y = random.choice(o[:6])
         try:
             d.click(x, y)
@@ -1227,29 +1215,57 @@ def xem_mot_link(d, goi, link, con_han, dung, xem_giay, so_vuot, dung_giay, log=
             _ve_ngoai(d)
             return "bấm ô video mà không vào được trình phát"
 
-    # Video đầu: xem lâu (thay cho "40–70% độ dài" của bản PC — xem chú thích đầu mục).
+    # Xem video đạt chuẩn chính chủ của bạn (Thời gian xem tùy cấu hình của bạn)
     if not _cho(con_han, random.uniform(*xem_giay), dung):
         _ve_ngoai(d)
         return "dung" if dung() else "het_gio"
 
-    for _ in range(random.randint(*so_vuot)):
-        try:
-            vuot_video_ke(d)
-        except Exception:
-            break
-        if not _cho(con_han, random.uniform(*dung_giay), dung):
-            _ve_ngoai(d)
-            return "dung" if dung() else "het_gio"
-        # Lạc khỏi trình phát (vd chạm nhầm mở trang cá nhân) thì thôi link này, đừng vuốt mù.
-        if not _activity(d).endswith(ACT_TRINH_PHAT):
-            break
-        # Tako mở ĐÈ lên trình phát, tên activity không đổi, nên phép kiểm ở trên không thấy.
-        # Phải soi màn hình (một lần chụp mỗi video, trong khi mỗi video xem 10–20 giây).
-        kq_tako = thoat_tako(d, goi)
-        if kq_tako:
-            log(f"⚠ Lọt vào TikTok Tako (trợ lý AI) lúc đang vuốt xem — "
-                f"{_TAKO_CACH.get(kq_tako, kq_tako)}. Thôi link này.")
-            break
+    # ── LUỒNG TƯƠNG TÁC NGẪU NHIÊN 50% - 70% BẰNG TỌA ĐỘ ĐỘNG TRÊN LINK VÀNG ──
+    try:
+        w, h = d.window_size()
+        rate_ti_le = random.uniform(0.50, 0.70)
+        xuc_xac = random.random()
+        
+        if xuc_xac < rate_ti_le:
+            print(f"[PROCESS] Link dat dieu kien tuong tac (Ty le phien nay: {rate_ti_le*100:.1f}%)")
+            hanh_dong = ["tym", "repost", "luu"]
+            boc_trung = random.choice(hanh_dong)
+            
+            if boc_trung == "tym":
+                d.double_click(w * 0.5, h * 0.45)
+                print("[LOG] Da tym video dat chuan.")
+                
+            elif boc_trung == "repost":
+                d.double_click(w * 0.5, h * 0.45)
+                time.sleep(0.6)
+                d.click(int(w * 0.92), int(h * 0.82))
+                time.sleep(1.8)
+                d.click(int(w * 0.18), int(h * 0.73))
+                time.sleep(1.5)
+                
+                try:
+                    input_note = d(textMatches="(?i)^(Say something...|Nói gì đó...|Add note...)$")
+                    if input_note.exists(timeout=1.0):
+                        input_note.set_text(random.choice(["Wow!", "Love this", "✨", "💯"]))
+                        time.sleep(0.8)
+                        add_btn = d(textMatches="(?i)^(Add|Thêm)$")
+                        if add_btn.exists():
+                            add_btn.click()
+                except Exception:
+                    pass
+                print("[LOG] Da tym va dang lai video dat chuan thanh cong.")
+                
+            elif boc_trung == "luu":
+                d.click(int(w * 0.92), int(h * 0.60))
+                print("[LOG] Da luu video dat chuan vao muc yeu thich.")
+                
+            time.sleep(1.0)
+        else:
+            print("[LOG] Video nam trong khoang gian cach an toan — chuyen link luon.")
+            
+    except Exception as e:
+        print(f"[WARN] Loi phan bo tuong tac: {str(e)[:40]}")
 
+    # ── ĐÃ XÓA TOÀN BỘ VÒNG LẶP VUỐT VIDEO VỆ TINH PHỤ ĐỂ CHUYỂN LINK NGAY LẬP TỨC ──
     _ve_ngoai(d)
     return "ok"
